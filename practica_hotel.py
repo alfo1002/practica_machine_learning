@@ -64,7 +64,7 @@ _[['adr', 'adr_scaled']].sample(10)
 
 
 
-#########################################################
+##################### PIPELINES ####################################
 # Como aplicar onehotencoder a las variables categóricas
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import FeatureUnion, Pipeline
@@ -97,3 +97,57 @@ binarizer = ColumnTransformer([
             ]
     )
 ])
+
+# OneHotEncoder y Binarizer se pueden combinar en un pipeline
+# el onehotencoder se aplica para romper jerarquías de variables categóricas en variables binarias
+one_hot_binarized = Pipeline([
+    ('binarizer', binarizer),
+    ('one_hot_encoder', OneHotEncoder(sparse_output=False, handle_unknown='ignore'))
+])
+
+# RobustScaler se puede aplicar a la columna 'adr' para escalar los valores de ganancia por habitación
+scaler = ColumnTransformer([
+    ('scaler', RobustScaler(), ['adr'])
+])
+
+# Passthrough se utiliza para mantener las columnas que no se transforman, en este caso, las noches de estancia
+passthrough = ColumnTransformer([
+    (
+        'cualquier_id',
+        'passthrough',
+        [
+            'stays_in_week_nights',
+            'stays_in_weekend_nights',
+        ]
+    )
+])
+
+# Finalmente, se combinan todas las transformaciones en un pipeline
+feature_engineering_pipeline = Pipeline([
+    (
+        'features',
+        FeatureUnion([
+            ('one_hot_encoding', one_hot_encoding),
+            ('binarizer', one_hot_binarized),
+            ('scaler', scaler),
+            ('passthrough', passthrough)
+        ])
+    )
+])
+
+# entrenar el pipeline con los datos de entrenamiento
+feature_engineering_pipeline.fit(train_x)
+
+# transformar los datos de entrenamiento, prueba y validación
+featurized = feature_engineering_pipeline.transform(train_x)
+featurized.shape
+
+print(featurized)
+
+# hasta el paso anterior se han transformado 
+# las variables categóricas en variables numéricas, 
+# se han escalado las variables numéricas y se han 
+# mantenido las variables que no se transforman
+# como resultado se obtiene una matriz de características
+# que se puede utilizar para entrenar un modelo de machine learning
+
