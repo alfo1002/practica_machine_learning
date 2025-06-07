@@ -4,3 +4,96 @@ from ydata_profiling import ProfileReport
 hotel_bookings = pd.read_csv('hotel_bookings.csv')
 
 hotel_bookings.info()
+
+profile = ProfileReport(hotel_bookings, title="Hotel Bookings Data Profiling Report", explorative=True)
+#profile.to_file("hotel_bookings_profile_report.html")
+
+# reservation_status: contiene información de si la reserva fue cancelada o no, lo cual puede introducir sesgo en el modelo.
+hotel_bookings = hotel_bookings.drop(['reservation_status', 'reservation_status_date'], axis=1)
+
+is_cancelled = hotel_bookings['is_canceled'].copy()
+hotel_data = hotel_bookings.drop(['is_canceled'], axis=1) # Drop the target variable from the features
+
+## Split the dataset into training and testing sets
+original_count = len(hotel_bookings)
+training_size = 0.60
+test_size = (1 - training_size) / 2
+training_count = int(original_count * training_size)
+test_count = int(original_count * test_size)
+validation_count = original_count - training_count - test_count
+
+print(training_count, test_count, validation_count, original_count)
+
+# Split the dataset into training, testing, and validation sets
+from sklearn.model_selection import train_test_split
+
+train_x, rest_x, train_y, rest_y = train_test_split(hotel_data, is_cancelled, train_size=training_count)
+
+test_x, validate_x, test_y, validate_y = train_test_split(rest_x, rest_y, train_size=test_count)
+
+print(len(train_x), len(test_x), len(validate_x))
+
+# onehotencoder sirve para convertir variables categóricas en variables numéricas
+# hotel es una variable categórica que indica el tipo de hotel, por lo que se puede aplicar one-hot encoding
+# # sparse_output=False significa que se devuelve una matriz densa en lugar de una matriz dispersa
+# handle_unknown='ignore' significa que si hay una categoría desconocida en los datos de prueba, se ignorará 
+from sklearn.preprocessing import OneHotEncoder
+one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+one_hot_encoder.fit(train_x[['hotel']])
+one_hot_encoder.transform(train_x[['hotel']])
+
+# Binarizer convierte variables categóricas en variables binarias
+from sklearn.preprocessing import Binarizer
+binarizer = Binarizer()
+_ = train_x.copy()
+binarizer.fit(_[['total_of_special_requests']])
+_['has_made_special_requests'] = binarizer.transform(_[['total_of_special_requests']])
+_[['total_of_special_requests', 'has_made_special_requests']].sample(10)
+
+
+# RobustScaler es una técnica de escalado que es robusta a los valores atípicos
+# adr es un valor que representa una ganancia por habitación, podría ser negativa 
+from sklearn.preprocessing import RobustScaler
+robust_scaler = RobustScaler()
+_ = train_x.copy()
+# sirve para ajustar el escalador a los datos de entrenamiento
+robust_scaler.fit(_[['adr']]) 
+# transform aplica la transformación a los datos de entrenamiento
+_['adr_scaled'] = robust_scaler.transform(train_x[['adr']])
+_[['adr', 'adr_scaled']].sample(10)
+
+
+
+#########################################################
+# Como aplicar onehotencoder a las variables categóricas
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import FeatureUnion, Pipeline
+
+one_hot_encoding = ColumnTransformer([
+    (
+            'one_hot_encode',
+            OneHotEncoder(sparse_output=False, handle_unknown='ignore'),
+            [
+                'hotel',
+                'meal',
+                'distribution_channel',
+                'reserved_room_type',
+                'assigned_room_type',
+                'customer_type'
+            ]
+    )
+])
+
+binarizer = ColumnTransformer([
+    (
+            'binarizer',
+            Binarizer(),
+            [
+                'total_of_special_requests',
+                'required_car_parking_spaces',
+                'booking_changes',
+                'previous_bookings_not_canceled',
+                'previous_cancellations',
+            ]
+    )
+])
